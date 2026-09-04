@@ -60,3 +60,47 @@
 Phase 2 (spec §62): Client management screens (create/edit/archive client,
 service assignment UI, client_assignments management) on top of the schema
 already in place.
+
+## Phase 2 — Client Management
+
+### Built
+- Clients list page (`/clients`) — table with status badges, links into
+  each client's detail page
+- New Client form (`/clients/new`) — Zod-validated Server Action, admin/AM
+  only per spec §3
+- Client detail page (`/clients/[id]`):
+  - Full client info display
+  - Pause / Reactivate / Archive controls
+  - Edit link → `/clients/[id]/edit`, reuses the same form component
+  - Services section: view assigned services + add a new one with a
+    monthly-unit scope
+  - Assigned Team section (agency_admin only): checkbox-based staff
+    assignment, backed by `client_assignments`
+  - Client Portal Access section: create a real client login (Supabase
+    Auth user + profile + client_users link) directly from the client
+    page, using the service-role client in a trusted server action —
+    shows the one-time temp password once, since email delivery (Resend)
+    isn't wired up yet
+
+### Database changes
+- None — Phase 2 works entirely on the schema from `0001_init.sql` /
+  `0002_rls.sql`. No new migration needed.
+
+### New environment variables
+- None
+
+### Security / RLS notes
+- All new mutations go through `requireAgencyRole()` before touching the
+  DB, in addition to RLS — matches the "server-side authorization checks"
+  requirement in spec §65
+- Client-login provisioning is the one legitimate service-role use case
+  outside the seed script; it's gated behind the same role check as every
+  other write here, and the service-role client still never reaches the
+  browser
+
+### Still requires configuration
+- Resend, so invited client users can get their credentials by email
+  instead of the agency admin manually relaying them
+
+### Next recommended phase
+Phase 3 (spec §62): Deliverables, Tasks, Production Dashboard, My Tasks.
