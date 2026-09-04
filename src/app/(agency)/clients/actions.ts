@@ -6,8 +6,10 @@ import { redirect } from "next/navigation";
 import {
   createClientRecord,
   updateClientStatus,
+  updateClientInfo,
   addClientService,
   setClientAssignments,
+  inviteClientUser,
 } from "@/lib/data/clients";
 import { requireAgencyRole } from "@/lib/auth/session";
 
@@ -102,4 +104,68 @@ export async function updateAssignmentsAction(clientId: string, formData: FormDa
   const ids = formData.getAll("agencyUserIds").map(String);
   await setClientAssignments(clientId, ids);
   revalidatePath(`/clients/${clientId}`);
+}
+
+export async function updateClientAction(
+  clientId: string,
+  _prevState: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const raw = Object.fromEntries(formData.entries());
+  const parsed = createClientSchema.safeParse(raw);
+
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      fieldErrors[String(issue.path[0])] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  try {
+    const clean = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, v]) => v !== "")
+    );
+    await updateClientInfo(clientId, clean as any);
+  } catch (err: any) {
+    return { error: err.message ?? "Something went wrong saving changes." };
+  }
+
+  revalidatePath(`/clients/${clientId}`);
+  redirect(`/clients/${clientId}`);
+}
+
+const inviteClientUserSchema = z.object({
+  clientId: z.string().uuid(),
+  fullName: z.string().min(1, "Name is required"),
+  email: z.string().email("Enter a valid email"),
+});
+
+export interface InviteState {
+  error?: string;
+  success?: { email: string; tempPassword: string };
+}
+
+export async function inviteClientUserAction(
+  _prevState: InviteState,
+  formData: FormData
+): Promise<InviteState> {
+  const parsed = inviteClientUserSchema.safeParse(
+    Object.fromEntries(formData.entries())
+  );
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  try {
+    const result = await inviteClientUser(
+      parsed.data.clientId,
+      parsed.data.fullName,
+      parsed.data.email
+    );
+    revalidatePath(`/clients/${parsed.data.clientId}`);
+    return { success: result };
+  } catch (err: any) {
+    return { error: err.message ?? "Couldn't create that login." };
+  }
 }

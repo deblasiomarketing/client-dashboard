@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAgencyRole } from "@/lib/auth/session";
 import {
@@ -6,6 +7,7 @@ import {
   getAvailableServices,
   getClientAssignments,
   listAgencyStaff,
+  listClientUsers,
 } from "@/lib/data/clients";
 import {
   archiveClientAction,
@@ -14,6 +16,7 @@ import {
   addClientServiceAction,
   updateAssignmentsAction,
 } from "../actions";
+import { InviteClientUserForm } from "./portal-users/invite-form";
 
 const statusStyles: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700",
@@ -40,12 +43,13 @@ export default async function ClientDetailPage({
     notFound();
   }
 
-  const [services, availableServices, assignedStaffIds, staff] =
+  const [services, availableServices, assignedStaffIds, staff, portalUsers] =
     await Promise.all([
       getClientServices(client.id),
       getAvailableServices(session.agency!.id),
       getClientAssignments(client.id),
       listAgencyStaff(session.agency!.id),
+      listClientUsers(client.id),
     ]);
 
   const canManage =
@@ -79,6 +83,12 @@ export default async function ClientDetailPage({
 
         {canManage && (
           <div className="flex gap-2">
+            <Link
+              href={`/clients/${client.id}/edit`}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Edit
+            </Link>
             {client.status !== "active" && (
               <form action={boundReactivate}>
                 <button className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -190,6 +200,35 @@ export default async function ClientDetailPage({
           </form>
         )}
       </section>
+
+      {/* Client portal users — who can log in as this client */}
+      {canManage && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold text-gray-900">
+            Client Portal Access
+          </h2>
+          {portalUsers.length === 0 ? (
+            <p className="mb-4 text-sm text-gray-500">
+              No portal logins yet — {client.client_name} can't sign in
+              until you create one below.
+            </p>
+          ) : (
+            <ul className="mb-4 space-y-2">
+              {portalUsers.map((u: any) => (
+                <li
+                  key={u.id}
+                  className="rounded-lg border border-gray-100 px-3 py-2 text-sm text-gray-900"
+                >
+                  {u.profiles?.full_name}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="border-t border-gray-100 pt-4">
+            <InviteClientUserForm clientId={client.id} />
+          </div>
+        </section>
+      )}
 
       {/* Assigned staff — admin only, per role permissions in spec §3 */}
       {isAdmin && (

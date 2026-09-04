@@ -138,6 +138,93 @@ export async function updateClientStatus(clientId: string, status: ClientStatus)
   if (error) throw error;
 }
 
+export async function updateClientInfo(
+  clientId: string,
+  input: CreateClientInput
+) {
+  await requireAgencyRole(["agency_admin", "account_manager"]);
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("clients")
+    .update(input)
+    .eq("id", clientId);
+
+  if (error) throw error;
+}
+
+// --- Client portal users (spec §3: Client User role, §37/§70 style logins) --
+
+export async function listClientUsers(clientId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("client_users")
+    .select("id, profile_id, profiles(full_name)")
+    .eq("client_id", clientId);
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Creates a real Supabase Auth login for a client contact and links it to
+ * this client. Uses the service-role client because provisioning a new
+ * auth user requires the admin API — this is exactly the "trusted server
+ * context" the service-role key is reserved for (see
+ * src/lib/supabase/server.ts), never exposed to the browser, and only
+ * reachable here after requireAgencyRole() confirms the caller is
+ * authorized staff.
+ *
+ * Returns a one-time temporary password — there is no email delivery
+ * configured yet (Resend integration is a later phase per spec §60), so
+ * the agency admin must relay this to the client out of band for now.
+ */
+export async function inviteClientUser(
+  clientId: string,
+  fullName: string,
+  email: string
+) {
+  await requireAgencyRole(["agency_admin", "account_manager"]);
+  const { createServiceRoleClient } = await import("@/lib/supabase/server");
+  const admin = createServiceRoleClient();
+
+  const tempPassword = generateTempPassword();
+
+  const { data: userRes, error: userErr } = await admin.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
+  });
+  if (userErr) throw userErr;
+  const user = userRes.user;
+
+  const { error: profileErr } = await admin.from("profiles").insert({
+    id: user.id,
+    full_name: fullName,
+    user_type: "client",
+  });
+  if (profileErr) throw profileErr;
+
+  const { error: linkErr } = await admin
+    .from("client_users")
+    .insert({ client_id: clientId, profile_id: user.id });
+  if (linkErr) throw linkErr;
+
+  return { email, tempPassword };
+}
+
+function generateTempPassword() {
+  // Not cryptographically precious — it's a one-time password the client
+  // is expected to change, delivered out of band by the agency admin.
+  const chars =
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
+  let pw = "";
+  for (let i = 0; i < 14; i++) {
+    pw += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return pw;
+}
+
 export async function addClientService(
   clientId: string,
   agencyId: string,
