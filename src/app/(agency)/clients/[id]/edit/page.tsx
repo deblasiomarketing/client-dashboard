@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { requireAgencyRole } from "@/lib/auth/session";
 import { getClient } from "@/lib/data/clients";
-import { NewClientForm } from "../new/new-client-form";
-import { updateClientAction } from "../actions";
+import { NewClientForm } from "../../new/new-client-form";
+import { updateClientAction } from "../../actions";
 
 export default async function EditClientPage({
   params,
